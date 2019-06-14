@@ -147,7 +147,7 @@ EXPORT_SYMBOL_GPL(nvme_delete_ctrl_sync);
 
 static inline bool nvme_ns_has_pi(struct nvme_ns *ns)
 {
-	return ns->pi_type && ns->ms == sizeof(struct t10_pi_tuple);
+	return ns->pi_type && ns->ms == sizeof(struct t100_pi_tuple);
 }
 
 static blk_status_t nvme_error_status(struct request *req)
