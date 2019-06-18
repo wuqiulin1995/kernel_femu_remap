@@ -144,9 +144,9 @@ static blk_status_t t100_pi_generate(struct blk_integrity_user user, struct blk_
 		pi->f2fs_new_lba = user.f2fs_new_lba;
 		pi->f2fs_temp = user.f2fs_temp;
 		pi->f2fs_type = user.f2fs_type;
-		printk("hao:%d %d %d %d %d %d\n",user.f2fs_ino, user.f2fs_off,
-                                                 user.f2fs_temp, user.f2fs_type,
-						 user.f2fs_old_lba, user.f2fs_new_lba);
+		//printk("hao:%d %d %d %d %d %d\n",user.f2fs_ino, user.f2fs_off,
+                          //                       user.f2fs_temp, user.f2fs_type,
+			//			 user.f2fs_old_lba, user.f2fs_new_lba);
 
 		if (type == 1)
 			pi->ref_tag = cpu_to_be32(lower_32_bits(iter->seed));
