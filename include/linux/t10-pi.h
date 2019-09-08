@@ -38,18 +38,23 @@ struct t10_pi_tuple {
 /*
  * add by hao
  */
+#ifdef CONFIG_METADATA_TRANS_12
+
 struct t100_pi_tuple {
 	__be16 guard_tag;	/* Checksum */
 	__be16 app_tag;		/* Opaque storage */
 	__be32 ref_tag;		/* Target LBA or indirect LBA */
+#ifdef CONFIG_METADATA_TRANS_20
 	__be32 f2fs_ino;
 	__be32 f2fs_off;
+#endif
 	__be32 f2fs_old_lba;
-	__be32 f2fs_new_lba;
-	__be32 f2fs_temp;
-	__be32 f2fs_type;
+//	__be32 f2fs_new_lba;
+//	__be32 f2fs_temp;
+//	__be32 f2fs_type;
 
 };
+#endif
 
 #define T10_PI_APP_ESCAPE cpu_to_be16(0xffff)
 #define T10_PI_REF_ESCAPE cpu_to_be32(0xffffffff)
@@ -60,7 +65,9 @@ extern const struct blk_integrity_profile t10_pi_type3_crc;
 extern const struct blk_integrity_profile t10_pi_type3_ip;
 
 //add by hao
+#ifdef CONFIG_METADATA_TRANS_12
 extern const struct blk_integrity_profile t100_pi_type1_crc;
 extern const struct blk_integrity_profile t100_pi_type3_crc;
+#endif
 
 #endif

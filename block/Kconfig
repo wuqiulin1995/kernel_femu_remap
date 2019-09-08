@@ -83,6 +83,15 @@ config BLK_DEV_BSGLIB
 
 	  If unsure, say N.
 
+config METADATA_TRANS_12
+	bool "METADATA TRANS SUPPORT (old lba)"
+	default n
+
+config METADATA_TRANS_20
+	bool "METADATA TRANS SUPPORT (20 byte)"
+#	depends on METADATA_TRANS_12=y
+	default n
+
 config BLK_DEV_INTEGRITY
 	bool "Block layer data integrity support"
 	select CRC_T10DIF if BLK_DEV_INTEGRITY

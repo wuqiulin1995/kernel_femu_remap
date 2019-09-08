@@ -221,27 +221,34 @@ static blk_status_t bio_integrity_process(struct bio *bio,
 
 		if (flag) {
 			page_user = bv.bv_page;
-			
-			user.f2fs_ino = page_user->mapping->host->i_ino;
+#ifdef CONFIG_METADATA_TRANS_20			
+//			user.f2fs_ino = page_user->mapping->host->i_ino;
 
-			user.f2fs_off = page_user->index;
+//			user.f2fs_off = page_user->index;
+			user.f2fs_ino = 0;
+			user.f2fs_off = 0;
+#endif
 
-			user.f2fs_new_lba = bv.bv_new_address; 
-
+//			user.f2fs_new_lba = bv.bv_new_address; 
+#ifdef CONFIG_METADATA_TRANS_12
 			user.f2fs_old_lba = bv.bv_old_address;
+#endif
+//			user.f2fs_temp = bio->temp;
 
-			user.f2fs_temp = bio->temp;
-
-			user.f2fs_type = bio->type;
+//			user.f2fs_type = bio->type;
 
 		}
 		else {
+#ifdef CONFIG_METADATA_TRANS_20
 			user.f2fs_ino = 0;
 			user.f2fs_off = 0;
-			user.f2fs_new_lba = 0; 
+#endif
+//			user.f2fs_new_lba = 0; 
+#ifdef CONFIG_METADATA_TRANS_12
 			user.f2fs_old_lba = 0;
-			user.f2fs_temp = 0;
-			user.f2fs_type = 0;
+#endif
+//			user.f2fs_temp = 0;
+//			user.f2fs_type = 0;
 
 		}
                // printk("hao:%d %d %d %d\n",user.f2fs_ino, user.f2fs_off, 

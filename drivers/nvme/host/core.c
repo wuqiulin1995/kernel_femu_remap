@@ -147,7 +147,11 @@ EXPORT_SYMBOL_GPL(nvme_delete_ctrl_sync);
 
 static inline bool nvme_ns_has_pi(struct nvme_ns *ns)
 {
+#ifdef CONFIG_METADATA_TRANS_12
 	return ns->pi_type && ns->ms == sizeof(struct t100_pi_tuple);
+#else 
+    return ns->pi_type && ns->ms == sizeof(struct t10_pi_tuple);
+#endif
 }
 
 static blk_status_t nvme_error_status(struct request *req)
@@ -1246,13 +1250,27 @@ static void nvme_init_integrity(struct gendisk *disk, u16 ms, u8 pi_type)
 	memset(&integrity, 0, sizeof(integrity));
 	switch (pi_type) {
 	case NVME_NS_DPS_PI_TYPE3:
+#ifdef CONFIG_METADATA_TRANS_12
+        printk("12_3_100%d %d\n",ms,pi_type);
+
 		integrity.profile = &t100_pi_type3_crc;
+#else
+        printk("12_3_10%d %d\n",ms,pi_type);
+		integrity.profile = &t10_pi_type3_crc;
+#endif
 		integrity.tag_size = sizeof(u16) + sizeof(u32);
 		integrity.flags |= BLK_INTEGRITY_DEVICE_CAPABLE;
 		break;
 	case NVME_NS_DPS_PI_TYPE1:
 	case NVME_NS_DPS_PI_TYPE2:
+#ifdef CONFIG_METADATA_TRANS_12
+        printk("12_2_100%d %d\n",ms,pi_type);
+
 		integrity.profile = &t100_pi_type1_crc;
+#else
+        printk("12_2_10%d %d\n",ms,pi_type);
+		integrity.profile = &t10_pi_type1_crc;
+#endif
 		integrity.tag_size = sizeof(u16);
 		integrity.flags |= BLK_INTEGRITY_DEVICE_CAPABLE;
 		break;
@@ -1261,7 +1279,7 @@ static void nvme_init_integrity(struct gendisk *disk, u16 ms, u8 pi_type)
 		break;
 	}
 
-        printk("hao_debug: aaaaaaaaaaaaaaaaaaaaaaaaaa%d %d",ms,pi_type);
+        printk("hao_debug: aaaaaaaaaaaaaaaaaaaaaaaaaa%d %d\n",ms,pi_type);
 
 	integrity.tuple_size = ms;
 	blk_integrity_register(disk, &integrity);
@@ -1378,7 +1396,11 @@ static void __nvme_revalidate_disk(struct gendisk *disk, struct nvme_id_ns *id)
 	ns->ext = ns->ms && (id->flbas & NVME_NS_FLBAS_META_EXT);
 	ns->ms = le16_to_cpu(id->lbaf[id->flbas & NVME_NS_FLBAS_LBA_MASK].ms);
 	/* the PI implementation requires metadata equal t10 pi tuple size */
+#ifdef CONFIG_METADATA_TRANS_12
 	if (ns->ms == sizeof(struct t100_pi_tuple))
+#else
+    if (ns->ms == sizeof(struct t10_pi_tuple))
+#endif
 		ns->pi_type = id->dps & NVME_NS_DPS_PI_MASK;
 	else
 		ns->pi_type = 0;
