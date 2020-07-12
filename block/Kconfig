@@ -83,13 +83,8 @@ config BLK_DEV_BSGLIB
 
 	  If unsure, say N.
 
-config METADATA_TRANS_12
-	bool "METADATA TRANS SUPPORT (old lba)"
-	default n
-
-config METADATA_TRANS_20
-	bool "METADATA TRANS SUPPORT (20 byte)"
-#	depends on METADATA_TRANS_12=y
+config METADATA_TRANS_24
+	bool "METADATA TRANS SUPPORT (tx_id, flag, h_lpn)"
 	default n
 
 config BLK_DEV_INTEGRITY

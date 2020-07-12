@@ -47,6 +47,8 @@
 #include <linux/pagevec.h>
 #include <trace/events/block.h>
 
+#include <linux/ioctl_remap.h>
+
 static int fsync_buffers_list(spinlock_t *lock, struct list_head *list);
 static int submit_bh_wbc(int op, int op_flags, struct buffer_head *bh,
 			 enum rw_hint hint, struct writeback_control *wbc);
@@ -1967,11 +1969,34 @@ int __block_write_begin_int(struct page *page, loff_t pos, unsigned len,
 	blocksize = head->b_size;
 	bbits = block_size_bits(blocksize);
 
+	if(blocksize != PAGE_SIZE)
+	{
+		printk(KERN_ALERT "ext4 FS block size != page size\n");
+	}
+
 	block = (sector_t)page->index << (PAGE_SHIFT - bbits);
 
 	for(bh = head, block_start = 0; bh != head || !block_start;
 	    block++, block_start=block_end, bh = bh->b_this_page) {
 		block_end = block_start + blocksize;
+	
+		bh->tx_id = 0;
+		bh->flag = 0;
+		bh->h_lpn = 0;
+		if((inode->flag == WAL_WRITE || inode->flag == WAL_WRITE+1 || inode->flag == CP_WRITE) && inode->dst_lblk == block)	
+		{
+			//if(inode->flag == WAL_WRITE || inode->flag == WAL_WRITE+1)
+			//	printk(KERN_ALERT "EXT4_IOC buffer : flag = %d, db_pblk = %lu\n", inode->flag, inode->h_lpn);
+			bh->tx_id = inode->tx_id;
+			bh->flag = inode->flag;
+			bh->h_lpn = inode->h_lpn;
+
+			inode->tx_id = 0;
+			inode->flag = 0;
+			inode->dst_lblk = 0;
+			inode->h_lpn = 0;
+		}
+
 		if (block_end <= from || block_start >= to) {
 			if (PageUptodate(page)) {
 				if (!buffer_uptodate(bh))

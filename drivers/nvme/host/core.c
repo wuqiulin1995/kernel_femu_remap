@@ -147,7 +147,7 @@ EXPORT_SYMBOL_GPL(nvme_delete_ctrl_sync);
 
 static inline bool nvme_ns_has_pi(struct nvme_ns *ns)
 {
-#ifdef CONFIG_METADATA_TRANS_12
+#ifdef CONFIG_METADATA_TRANS_24
 	return ns->pi_type && ns->ms == sizeof(struct t100_pi_tuple);
 #else 
     return ns->pi_type && ns->ms == sizeof(struct t10_pi_tuple);
@@ -1247,15 +1247,16 @@ static void nvme_init_integrity(struct gendisk *disk, u16 ms, u8 pi_type)
 {
 	struct blk_integrity integrity;
 
+#ifdef CONFIG_METADATA_TRANS_24
+	//printk("hao_debug nvme_init_integrity: ms = %d, pi_type = %d\n", ms, pi_type);
+#endif
+
 	memset(&integrity, 0, sizeof(integrity));
 	switch (pi_type) {
 	case NVME_NS_DPS_PI_TYPE3:
-#ifdef CONFIG_METADATA_TRANS_12
-        printk("12_3_100%d %d\n",ms,pi_type);
-
+#ifdef CONFIG_METADATA_TRANS_24
 		integrity.profile = &t100_pi_type3_crc;
 #else
-        printk("12_3_10%d %d\n",ms,pi_type);
 		integrity.profile = &t10_pi_type3_crc;
 #endif
 		integrity.tag_size = sizeof(u16) + sizeof(u32);
@@ -1263,12 +1264,9 @@ static void nvme_init_integrity(struct gendisk *disk, u16 ms, u8 pi_type)
 		break;
 	case NVME_NS_DPS_PI_TYPE1:
 	case NVME_NS_DPS_PI_TYPE2:
-#ifdef CONFIG_METADATA_TRANS_12
-        printk("12_2_100%d %d\n",ms,pi_type);
-
+#ifdef CONFIG_METADATA_TRANS_24
 		integrity.profile = &t100_pi_type1_crc;
 #else
-        printk("12_2_10%d %d\n",ms,pi_type);
 		integrity.profile = &t10_pi_type1_crc;
 #endif
 		integrity.tag_size = sizeof(u16);
@@ -1278,8 +1276,6 @@ static void nvme_init_integrity(struct gendisk *disk, u16 ms, u8 pi_type)
 		integrity.profile = NULL;
 		break;
 	}
-
-        printk("hao_debug: aaaaaaaaaaaaaaaaaaaaaaaaaa%d %d\n",ms,pi_type);
 
 	integrity.tuple_size = ms;
 	blk_integrity_register(disk, &integrity);
@@ -1396,7 +1392,7 @@ static void __nvme_revalidate_disk(struct gendisk *disk, struct nvme_id_ns *id)
 	ns->ext = ns->ms && (id->flbas & NVME_NS_FLBAS_META_EXT);
 	ns->ms = le16_to_cpu(id->lbaf[id->flbas & NVME_NS_FLBAS_LBA_MASK].ms);
 	/* the PI implementation requires metadata equal t10 pi tuple size */
-#ifdef CONFIG_METADATA_TRANS_12
+#ifdef CONFIG_METADATA_TRANS_24
 	if (ns->ms == sizeof(struct t100_pi_tuple))
 #else
     if (ns->ms == sizeof(struct t10_pi_tuple))

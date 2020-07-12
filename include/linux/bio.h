@@ -59,8 +59,6 @@
 #define bio_iter_iovec_hao(bio, iter)				\
 	bvec_iter_bvec_hao((bio)->bi_io_vec, (iter))
 
-
-
 #define bio_iter_page(bio, iter)				\
 	bvec_iter_page((bio)->bi_io_vec, (iter))
 #define bio_iter_len(bio, iter)					\
@@ -197,7 +195,7 @@ static inline bool bio_rewind_iter(struct bio *bio, struct bvec_iter *iter,
 		((bvl = bio_iter_iovec((bio), (iter))), 1);		\
 	     bio_advance_iter((bio), &(iter), (bvl).bv_len))
 
-
+// METADATA_TRANS_24
 #define __bio_for_each_segment_hao(bvl, bio, iter, start)			\
 		for (iter = (start);						\
 			 (iter).bi_size &&					\
@@ -207,9 +205,6 @@ static inline bool bio_rewind_iter(struct bio *bio, struct bvec_iter *iter,
 
 #define bio_for_each_segment(bvl, bio, iter)				\
 	__bio_for_each_segment(bvl, bio, iter, (bio)->bi_iter)
-
-
-
 
 
 #define bio_iter_last(bvec, iter) ((iter).bi_size == (bvec).bv_len)

@@ -30,6 +30,8 @@
 #include "xattr.h"
 #include "acl.h"
 
+#include <linux/ioctl_remap.h>
+
 static struct kmem_cache *io_end_cachep;
 
 int __init ext4_init_pageio(void)
@@ -391,6 +393,11 @@ static int io_submit_add_bh(struct ext4_io_submit *io,
 {
 	int ret;
 
+	if(bh->b_size != PAGE_SIZE)
+	{
+		printk(KERN_ALERT "ext4 FS block size != page size\n");
+	}
+
 	if (io->io_bio && bh->b_blocknr != io->io_next_block) {
 submit_and_retry:
 		ext4_io_submit(io);
@@ -402,6 +409,18 @@ submit_and_retry:
 		io->io_bio->bi_write_hint = inode->i_write_hint;
 	}
 	ret = bio_add_page(io->io_bio, page, bh->b_size, bh_offset(bh));
+	
+	//if(bh->flag == WAL_WRITE || bh->flag == WAL_WRITE+1)
+	//	printk(KERN_ALERT "EXT4_IOC page-io : flag = %d, db_pblk = %lu\n", bh->flag, bh->h_lpn);
+	
+	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].tx_id = bh->tx_id;
+	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].flag = bh->flag;
+	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].h_lpn = bh->h_lpn;
+
+	bh->tx_id = 0;
+	bh->flag = 0;
+	bh->h_lpn = 0;
+
 	if (ret != bh->b_size)
 		goto submit_and_retry;
 	wbc_account_io(io->io_wbc, page, bh->b_size);

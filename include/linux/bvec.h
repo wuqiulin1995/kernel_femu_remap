@@ -31,8 +31,10 @@ struct bio_vec {
 	struct page	*bv_page;
 	unsigned int	bv_len;
 	unsigned int	bv_offset;
-	sector_t       bv_old_address;
-	sector_t       bv_new_address;
+
+	unsigned int	tx_id;
+	unsigned int	flag;
+	sector_t		h_lpn;
 };
 
 struct bvec_iter {
@@ -65,15 +67,14 @@ struct bvec_iter {
 	(__bvec_iter_bvec((bvec), (iter))->bv_offset + (iter).bi_bvec_done)
 
 //add by hao
+#define bvec_iter_tx_id(bvec, iter)				\
+	(__bvec_iter_bvec((bvec), (iter))->tx_id + (iter).bi_bvec_done)
 
-#define bvec_iter_old_lba(bvec, iter)				\
-	(__bvec_iter_bvec((bvec), (iter))->bv_old_address + (iter).bi_bvec_done)
+#define bvec_iter_flag(bvec, iter)				\
+	(__bvec_iter_bvec((bvec), (iter))->flag + (iter).bi_bvec_done)
 
-
-#define bvec_iter_new_lba(bvec, iter)				\
-	(__bvec_iter_bvec((bvec), (iter))->bv_new_address + (iter).bi_bvec_done)
-
-
+#define bvec_iter_h_lpn(bvec, iter)				\
+	(__bvec_iter_bvec((bvec), (iter))->h_lpn + (iter).bi_bvec_done)
 
 #define bvec_iter_bvec(bvec, iter)				\
 ((struct bio_vec) {						\
@@ -89,8 +90,9 @@ struct bvec_iter {
 	.bv_page	= bvec_iter_page((bvec), (iter)),	\
 	.bv_len		= bvec_iter_len((bvec), (iter)),	\
 	.bv_offset	= bvec_iter_offset((bvec), (iter)),	\
-	.bv_old_address = bvec_iter_old_lba((bvec), (iter)),	\
-	.bv_new_address = bvec_iter_new_lba((bvec), (iter)),	\
+	.tx_id		= bvec_iter_tx_id((bvec), (iter)),	\
+	.flag		= bvec_iter_flag((bvec), (iter)),	\
+	.h_lpn = bvec_iter_h_lpn((bvec), (iter)),	\
 })
 
 static inline bool bvec_iter_advance(const struct bio_vec *bv,

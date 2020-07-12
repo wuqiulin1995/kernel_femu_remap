@@ -1800,14 +1800,18 @@ struct blk_integrity_iter {
 	const char		*disk_name;
 };
 
-//add by hao
-struct blk_integrity_user {     //add by hao
-	__be32 f2fs_ino;         //hao:4kb data coresponding ino
-	__be32 f2fs_off;         //hao:4kb data coresponding off
-	__be32 f2fs_old_lba;     //hao:4kb data coresponding old_lba
-	__be32 f2fs_new_lba;     //hao:4kb data coresponding new_lba
-	__be32 f2fs_temp;        //hao:4kb data coresponding temp
-	__be32 f2fs_type;        //hao:4kb data coresponding type
+//added by hao, modified by wql
+struct blk_integrity_user {
+	//__be32 f2fs_ino;         //hao:4kb data coresponding ino
+	//__be32 f2fs_off;         //hao:4kb data coresponding off
+	//__be32 f2fs_old_lba;     //hao:4kb data coresponding old_lba
+	//__be32 f2fs_new_lba;     //hao:4kb data coresponding new_lba
+	//__be32 f2fs_temp;        //hao:4kb data coresponding temp
+	//__be32 f2fs_type;        //hao:4kb data coresponding type
+
+	unsigned int tx_id;
+	unsigned int flag;
+	unsigned long h_lpn;
 };
 
 typedef blk_status_t (integrity_processing_fn) (struct blk_integrity_iter *, struct blk_integrity_user );

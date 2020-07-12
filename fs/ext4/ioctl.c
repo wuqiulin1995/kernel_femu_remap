@@ -25,6 +25,8 @@
 #include "fsmap.h"
 #include <trace/events/ext4.h>
 
+#include <linux/ioctl_remap.h>
+
 /**
  * Swap memory between @a and @b for @len bytes.
  *
@@ -1042,6 +1044,395 @@ resizefs_out:
 			return err;
 
 		return 0;
+	}
+	case EXT4_IOC_WAL_TX_WRITE:
+	{
+		struct wal_tx_write_info wal_info;
+		struct fd db_f;
+		struct inode *db_inode;
+		struct ext4_map_blocks db_map;
+		const unsigned blkbits = inode->i_blkbits;
+		int ret = -ESPIPE;
+
+		//struct dentry *dentry;
+		//char *fname;
+		//char *ss;
+
+		memset(&wal_info, 0, sizeof(wal_info));
+		memset(&db_map, 0, sizeof(db_map));
+
+		if (copy_from_user(&wal_info, (struct wal_tx_write_info __user *)arg, sizeof(wal_info)))
+			return -EFAULT;
+
+		if (wal_info.pos < 0 || wal_info.db_lblk < 0 || wal_info.count < 0)
+			return -EINVAL;
+
+		db_f = fdget(wal_info.db_fd);
+		if (db_f.file)
+			db_inode = file_inode(db_f.file);
+		else 
+			return -EBADF;
+		
+		db_map.m_lblk = wal_info.db_lblk;
+		db_map.m_len = 1;
+
+		if(ext4_map_blocks(NULL,db_inode, &db_map, 0) < 0)
+		{
+			printk(KERN_ALERT "EXT4_IOC_WAL_TX_WRITE: ext4_map_blocks(NULL,db_inode, &db_map, 0) < 0\n");
+			return -EFAULT;
+		}
+		
+		if ((db_map.m_flags & EXT4_MAP_MAPPED) == 0)
+		{
+			//printk(KERN_ALERT "EXT4_IOC_WAL_TX_WRITE: (map.m_flags & EXT4_MAP_MAPPED) == 0\n");
+			//return -EFAULT;
+			inode->h_lpn = 0;
+		}
+		else
+		{
+			inode->h_lpn = db_map.m_pblk;
+		}
+
+		inode->flag = wal_info.flag;
+		inode->dst_lblk = wal_info.pos >> blkbits;
+		inode->tx_id = 0;
+
+		//dentry = filp->f_path.dentry;
+		//fname = (char *) kmalloc(sizeof(char) * 4096, GFP_KERNEL);
+		//ss = dentry_path_raw(dentry, fname, 4096);
+		//kfree(fname);
+		//printk(KERN_ALERT "EXT4_IOC ioctl : pos = %ld, flag = %d, db_lblk = %u, db_pblk = %lu\n", wal_info.pos, wal_info.flag, wal_info.db_lblk, db_map.m_pblk);
+			
+		if (filp->f_mode & FMODE_PWRITE)  
+			ret = vfs_write(filp, (char __user *)wal_info.pbuf, wal_info.count, &(wal_info.pos));
+		if (ret == wal_info.count)
+			ret = 0;
+		
+		inode->flag = 0;
+		inode->dst_lblk = 0;
+		inode->h_lpn = 0;
+		inode->tx_id = 0;
+
+		fdput(db_f);
+		return ret;
+	}
+	case EXT4_IOC_CP_WRITE:
+	{
+		struct cp_write_info cp_info;
+		const unsigned blkbits = inode->i_blkbits;
+		int ret = -ESPIPE;
+
+		memset(&cp_info, 0, sizeof(cp_info));
+
+		if (copy_from_user(&cp_info, (struct cp_write_info __user *)arg, sizeof(cp_info)))
+			return -EFAULT;
+
+		if (cp_info.pos < 0 || cp_info.count < 0)
+			return -EINVAL;
+
+		inode->flag = cp_info.flag;
+		inode->dst_lblk = cp_info.pos >> blkbits;
+		//printk(KERN_ALERT "EXT4_IOC ioctl :  pos = %ld, flag = %d \n", cp_info.pos, cp_info.flag);		
+		if (filp->f_mode & FMODE_PWRITE)  
+			ret = vfs_write(filp, (char __user *)cp_info.pbuf, cp_info.count, &(cp_info.pos));
+		if (ret == cp_info.count)
+			ret = 0;
+		
+		inode->flag = 0;
+		inode->dst_lblk = 0;
+
+		return ret;
+	}
+	case EXT4_IOC_REMAP_CKPT:
+	{
+		struct remap_ckpt_info ckpt_info;
+		struct fd wal_f;
+		struct inode *wal_inode;
+		struct ext4_map_blocks wal_map, db_map;
+		ext4_fsblk_t remap_wal_lpn = 0, last_wal_lpn = 0;
+		ext4_fsblk_t remap_db_lpn = 0, last_db_lpn = 0;
+		unsigned int remap_len = 0, rest_len = 0;
+		unsigned int remap_ope = REMAP_CKPT;
+		int ret = 0;
+
+		memset(&ckpt_info, 0, sizeof(ckpt_info));
+		memset(&wal_map, 0, sizeof(wal_map));
+		memset(&db_map, 0, sizeof(db_map));
+
+		if (copy_from_user(&ckpt_info, (struct remap_ckpt_info __user *)arg, sizeof(ckpt_info)))
+			return -EFAULT;
+
+		if (ckpt_info.wal_lblk < 0 || ckpt_info.db_lblk < 0 || ckpt_info.len < 0)
+			return -EINVAL;
+
+		wal_f = fdget(ckpt_info.wal_fd);
+		if (wal_f.file)
+			wal_inode = file_inode(wal_f.file);
+		else 
+			return -EBADF;
+
+		wal_map.m_lblk = ckpt_info.wal_lblk;
+		wal_map.m_len = 1;
+		db_map.m_lblk = ckpt_info.db_lblk;
+		db_map.m_len = 1;
+
+		/* 
+		// 每次只处理一个文件block (LPN)
+		if((ext4_map_blocks(NULL,wal_inode, &wal_map, 0) < 0) || (ext4_map_blocks(NULL,inode, &db_map, 0) < 0))
+		{
+			printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: ext4_map_blocks() < 0\n");
+			return -EFAULT;
+		}
+
+		if (((wal_map.m_flags & EXT4_MAP_MAPPED) == 0) || ((db_map.m_flags & EXT4_MAP_MAPPED) == 0))
+		{
+			printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: (map.m_flags & EXT4_MAP_MAPPED) == 0\n");
+			return -EFAULT;
+		}
+
+		remap_wal_lpn = wal_map.m_pblk;
+		remap_db_lpn = db_map.m_pblk;
+		remap_len = 1;
+
+		ret = nvme_issue_remap(remap_wal_lpn, remap_db_lpn, remap_len, remap_ope);
+		if(ret < 0)
+		{
+			printk("EXT4_IOC_REMAP_CKPT: nvme_issue_remap() error\n");
+			return ret;
+		}
+		*/
+
+		for(rest_len = ckpt_info.len; rest_len > 0; rest_len--)
+		{
+			if((ext4_map_blocks(NULL,wal_inode, &wal_map, 0) < 0) || (ext4_map_blocks(NULL,inode, &db_map, 0) < 0))
+			{
+				printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: ext4_map_blocks() < 0\n");
+				return -EFAULT;
+			}
+
+			if (((wal_map.m_flags & EXT4_MAP_MAPPED) == 0) || ((db_map.m_flags & EXT4_MAP_MAPPED) == 0))
+			{
+				printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: (map.m_flags & EXT4_MAP_MAPPED) == 0\n");
+				return -EFAULT;
+			}
+
+			if(rest_len == ckpt_info.len)   //第一个文件block
+			{
+				remap_wal_lpn = wal_map.m_pblk;
+				remap_db_lpn = db_map.m_pblk;
+				remap_len = 1;
+			}
+			else
+			{
+				if((wal_map.m_pblk != last_wal_lpn + 1) || (db_map.m_pblk != last_db_lpn + 1))
+				{
+					ret = nvme_issue_remap(remap_wal_lpn, remap_db_lpn, remap_len, remap_ope);  // 下发REMAP命令
+					if(ret)
+					{
+						printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: nvme_issue_remap() error\n");
+						return ret;
+					}
+
+					remap_wal_lpn = wal_map.m_pblk;
+					remap_db_lpn = db_map.m_pblk;
+					remap_len = 1;	
+				}
+				else
+				{
+					remap_len++;
+				}
+
+				if(rest_len == 1)
+                                {
+                                        ret = nvme_issue_remap(remap_wal_lpn, remap_db_lpn, remap_len, remap_ope);  // ��~K�~O~QREMAP�~Q�令
+                                        if(ret)
+                                        {
+                                                printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: nvme_issue_remap() error\n");
+                                                return ret;
+                                        }
+                                }
+
+			}
+
+			last_wal_lpn = wal_map.m_pblk;
+			last_db_lpn = db_map.m_pblk;
+
+			wal_map.m_lblk++;
+			wal_map.m_pblk = 0;
+			wal_map.m_flags = 0;
+			db_map.m_lblk++;
+			db_map.m_pblk = 0;
+			db_map.m_flags = 0;
+		}
+
+		fdput(wal_f);
+		return ret;
+	}
+	case EXT4_IOC_REMAP_COPY:
+	{
+		struct remap_copy_info copy_info;
+		struct fd src_f;
+		struct inode *src_inode;
+		struct ext4_map_blocks src_map, dst_map;
+		ext4_fsblk_t remap_src_lpn = 0, last_src_lpn = 0;
+		ext4_fsblk_t remap_dst_lpn = 0, last_dst_lpn = 0;
+		unsigned int remap_len = 0, rest_len = 0;
+		unsigned int remap_ope = REMAP_COPY;   // remap checkpoint write 也可以使用此分支，remap_ope = REMAP_CKPT
+		int ret = 0, needed_blocks = 0, i_size_changed = 0;
+		handle_t *handle;
+		const unsigned blkbits = inode->i_blkbits;
+		loff_t pos = 0;
+		size_t copied = 0, rest_bytes = 0;
+
+		memset(&copy_info, 0, sizeof(copy_info));
+		memset(&src_map, 0, sizeof(src_map));
+		memset(&dst_map, 0, sizeof(dst_map));
+
+		if (copy_from_user(&copy_info, (struct remap_copy_info __user *)arg, sizeof(copy_info)))
+			return -EFAULT;
+
+		if (copy_info.src_lblk < 0 || copy_info.dst_lblk < 0 || copy_info.len < 0 || copy_info.count < 0)
+			return -EINVAL;
+
+		src_f = fdget(copy_info.src_fd);
+		if (src_f.file)
+			src_inode = file_inode(src_f.file);
+		else 
+			return -EBADF;
+
+		src_map.m_lblk = copy_info.src_lblk;
+		src_map.m_len = 1;
+		dst_map.m_lblk = copy_info.dst_lblk;
+		dst_map.m_len = 1;
+
+		/* 
+		// 每次只处理一个文件block (LPN)
+		pos = copy_info.dst_lblk << blkbits;
+		copied = copy_info.count;
+
+		if((ext4_map_blocks(NULL, src_inode, &src_map, 0) < 0) || (src_map.m_flags & EXT4_MAP_MAPPED) == 0))
+		{
+			printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: src file block map error\n");
+			return -EFAULT;
+		}
+
+		needed_blocks = ext4_writepage_trans_blocks(inode) + 1;
+
+		handle = ext4_journal_start(inode, EXT4_HT_WRITE_PAGE, needed_blocks);
+		if (IS_ERR(handle)) {
+			printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: handle error\n");
+			return PTR_ERR(handle);
+		}
+
+		if(ext4_map_blocks(handle, inode, &dst_map, EXT4_GET_BLOCKS_CREATE) < 0)
+		{
+			printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: dst file block map error\n");
+			return -EFAULT;
+		}
+
+		i_size_changed = ext4_update_inode_size(inode, pos + copied);
+
+		if (i_size_changed)
+			ext4_mark_inode_dirty(handle, inode);
+
+		ret = ext4_journal_stop(handle);
+
+		remap_src_lpn = src_map.m_pblk;
+		remap_dst_lpn = dst_map.m_pblk;
+		remap_len = 1;
+
+		ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);
+		if(ret < 0)
+		{
+			printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: nvme_issue_remap() error\n");
+			return ret;
+		}
+		*/
+		pos = copy_info.dst_lblk << blkbits;
+
+		for(rest_len = copy_info.len, rest_bytes = copy_info.count; rest_len > 0; rest_len--, rest_bytes -= copied, pos += copied)
+		{
+			if((ext4_map_blocks(NULL, src_inode, &src_map, 0) < 0) || (src_map.m_flags & EXT4_MAP_MAPPED) == 0)
+			{
+				printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: src file block map error\n");
+				return -EFAULT;
+			}
+
+			needed_blocks = ext4_writepage_trans_blocks(inode) + 1;
+
+			handle = ext4_journal_start(inode, EXT4_HT_WRITE_PAGE, needed_blocks);
+			if (IS_ERR(handle)) {
+				printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: handle error\n");
+				return PTR_ERR(handle);
+			}
+
+			if(ext4_map_blocks(handle, inode, &dst_map, EXT4_GET_BLOCKS_CREATE) < 0)
+			{
+				printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: dst file block map error\n");
+				return -EFAULT;
+			}
+
+			if(rest_bytes < (1 << blkbits))
+				copied = rest_bytes;
+			else
+				copied = 1 << blkbits;
+			i_size_changed = ext4_update_inode_size(inode, pos + copied);
+
+			if (i_size_changed)
+				ext4_mark_inode_dirty(handle, inode);
+
+			ret = ext4_journal_stop(handle);
+
+			if(rest_len == copy_info.len)   //第一个文件block
+			{
+				remap_src_lpn = src_map.m_pblk;
+				remap_dst_lpn = dst_map.m_pblk;
+				remap_len = 1;
+			}
+			else
+			{
+				if((src_map.m_pblk != last_src_lpn + 1) || (dst_map.m_pblk != last_dst_lpn + 1))
+				{
+					ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);  // 下发REMAP命令
+					if(ret)
+					{
+						printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: nvme_issue_remap() error\n");
+						return ret;
+					}
+
+					remap_src_lpn = src_map.m_pblk;
+					remap_dst_lpn = dst_map.m_pblk;
+					remap_len = 1;		
+				}
+				else
+				{
+					remap_len++;
+				}
+
+				if(rest_len == 1)
+				{
+					ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);  // 下发REMAP命令
+					if(ret)
+					{
+						printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: nvme_issue_remap() error\n");
+						return ret;
+					}
+				}
+			}
+
+			last_src_lpn = src_map.m_pblk;
+			last_dst_lpn = dst_map.m_pblk;
+
+			src_map.m_lblk++;
+			src_map.m_pblk = 0;
+			src_map.m_flags = 0;
+			dst_map.m_lblk++;
+			dst_map.m_pblk = 0;
+			dst_map.m_flags = 0;
+		}
+
+		fdput(src_f);
+		return ret;
 	}
 	case EXT4_IOC_SHUTDOWN:
 		return ext4_shutdown(sb, arg);

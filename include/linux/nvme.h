@@ -710,6 +710,7 @@ enum nvme_admin_opcode {
 	nvme_admin_security_send	= 0x81,
 	nvme_admin_security_recv	= 0x82,
 	nvme_admin_sanitize_nvm		= 0x84,
+	nvme_admin_remap 			= 0x3c,
 };
 
 enum {
@@ -911,6 +912,18 @@ struct nvmf_common_command {
 	__u8	ts[24];
 };
 
+struct nvme_remap_cmd {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__u32			rsvd1;
+	__le64			src_lpn;
+	__le64			dst_lpn;
+	__le32			len;
+	__le32			ope;
+	__u32			rsvd2[8];
+};
+
 /*
  * The legal cntlid range a NVMe Target will provide.
  * Note that cntlid of value 0 is considered illegal in the fabrics world.
@@ -1052,6 +1065,7 @@ struct nvme_command {
 		struct nvmf_property_get_command prop_get;
 		struct nvme_dbbuf dbbuf;
 		struct nvme_directive_cmd directive;
+		struct nvme_remap_cmd remap;
 	};
 };
 

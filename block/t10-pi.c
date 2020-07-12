@@ -126,8 +126,7 @@ next:
 }
 
 //add by hao
-
-#ifdef CONFIG_METADATA_TRANS_12
+#ifdef CONFIG_METADATA_TRANS_24
 
 static blk_status_t t100_pi_generate(struct blk_integrity_user user, struct blk_integrity_iter *iter,
 		csum_fn *fn, unsigned int type)
@@ -141,17 +140,10 @@ static blk_status_t t100_pi_generate(struct blk_integrity_user user, struct blk_
 		pi->app_tag = 0;
 
 		//add by hao
-#ifdef CONFIG_METADATA_TRANS_20
-		pi->f2fs_ino = user.f2fs_ino;
-		pi->f2fs_off = user.f2fs_off;
-#endif
-		pi->f2fs_old_lba = user.f2fs_old_lba;
-//		pi->f2fs_new_lba = user.f2fs_new_lba;
-//		pi->f2fs_temp = user.f2fs_temp;
-//		pi->f2fs_type = user.f2fs_type;
-		//printk("hao:%d %d %d %d %d %d\n",user.f2fs_ino, user.f2fs_off,
-                          //                       user.f2fs_temp, user.f2fs_type,
-			//			 user.f2fs_old_lba, user.f2fs_new_lba);
+		pi->tx_id = cpu_to_be32(user.tx_id);
+		pi->flag = cpu_to_be32(user.flag);
+		pi->h_lpn = cpu_to_be64(user.h_lpn);
+		//printk("hao_debug t100_pi_generate: flag = %u, h_lpn = %lu\n",user.flag, user.h_lpn);
 
 		if (type == 1)
 			pi->ref_tag = cpu_to_be32(lower_32_bits(iter->seed));
@@ -266,7 +258,7 @@ static blk_status_t t10_pi_type3_verify_ip(struct blk_integrity_iter *iter, stru
 
 //add by hao
 
-#ifdef CONFIG_METADATA_TRANS_12
+#ifdef CONFIG_METADATA_TRANS_24
 
 static blk_status_t t100_pi_type1_generate_crc(struct blk_integrity_iter *iter, struct blk_integrity_user user)
 {
@@ -277,7 +269,6 @@ static blk_status_t t100_pi_type1_verify_crc(struct blk_integrity_iter *iter, st
 {
 	return t100_pi_verify(user, iter, t10_pi_crc_fn, 1);
 }
-
 
 
 static blk_status_t t100_pi_type3_generate_crc(struct blk_integrity_iter *iter, struct blk_integrity_user user)
@@ -321,12 +312,11 @@ const struct blk_integrity_profile t10_pi_type3_ip = {
 EXPORT_SYMBOL(t10_pi_type3_ip);
 //add by hao
 
-#ifdef CONFIG_METADATA_TRANS_12
+#ifdef CONFIG_METADATA_TRANS_24
 const struct blk_integrity_profile t100_pi_type3_crc = {
 	.name			= "T100-DIF-TYPE3-CRC",
 	.generate_fn		= t100_pi_type3_generate_crc,
 	.verify_fn		= t100_pi_type3_verify_crc,
-
 };
 EXPORT_SYMBOL(t100_pi_type3_crc);
 	

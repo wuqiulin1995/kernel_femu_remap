@@ -32,6 +32,8 @@
 
 #include "nvme.h"
 
+static struct nvme_dev *g_dev;
+
 #define SQ_SIZE(depth)		(depth * sizeof(struct nvme_command))
 #define CQ_SIZE(depth)		(depth * sizeof(struct nvme_completion))
 
@@ -2287,6 +2289,7 @@ static void nvme_reset_work(struct work_struct *work)
 {
 	struct nvme_dev *dev =
 		container_of(work, struct nvme_dev, ctrl.reset_work);
+
 	bool was_suspend = !!(dev->ctrl.ctrl_config & NVME_CC_SHN_NORMAL);
 	int result = -ENODEV;
 
@@ -2370,6 +2373,23 @@ static void nvme_reset_work(struct work_struct *work)
  out:
 	nvme_remove_dead_ctrl(dev, result);
 }
+
+int nvme_issue_remap(unsigned long src_lpn, unsigned long dst_lpn, unsigned int len, unsigned int ope)
+{
+	struct nvme_command c;
+
+	printk(KERN_ALERT "NVMe remap: name = %s, src_lpn = %lu, dst_lpn = %lu, len = %u, ope = %u\n", g_dev->ctrl.name, src_lpn, dst_lpn, len, ope);
+
+	memset(&c, 0, sizeof(c));
+	c.remap.opcode = nvme_admin_remap;
+	c.remap.src_lpn = cpu_to_le64(src_lpn);
+	c.remap.dst_lpn = cpu_to_le64(dst_lpn);
+	c.remap.len = cpu_to_le32(len);
+	c.remap.ope = cpu_to_le32(ope);
+
+	return nvme_submit_sync_cmd(g_dev->ctrl.admin_q, &c, NULL, 0);
+}
+EXPORT_SYMBOL(nvme_issue_remap);
 
 static void nvme_remove_dead_ctrl_work(struct work_struct *work)
 {
@@ -2493,6 +2513,9 @@ static int nvme_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	result = nvme_init_ctrl(&dev->ctrl, &pdev->dev, &nvme_pci_ctrl_ops,
 			quirks);
+
+	g_dev = dev;
+
 	if (result)
 		goto release_pools;
 

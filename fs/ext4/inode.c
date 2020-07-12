@@ -4955,6 +4955,7 @@ struct inode *ext4_iget(struct super_block *sb, unsigned long ino)
 	ext4_set_inode_flags(inode);
 
 	unlock_new_inode(inode);
+
 	return inode;
 
 bad_inode:

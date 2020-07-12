@@ -28,6 +28,8 @@
 #include <linux/slab.h>
 #include "blk.h"
 
+#include <linux/ioctl_remap.h>
+
 #define BIP_INLINE_VECS	4
 
 static struct kmem_cache *bip_slab;
@@ -195,23 +197,23 @@ static blk_status_t bio_integrity_process(struct bio *bio,
 	struct bvec_iter bviter;
 	struct bio_vec bv;
 	struct bio_integrity_payload *bip = bio_integrity(bio);
-
 	
-	struct blk_integrity_user user;                                     //add by hao
-	struct page *page_user;                                              //add by hao for ino and off
-
-	bool flag = false;
+	struct blk_integrity_user user;             //add by hao
+	
+	bool is_write = false;
 
 	blk_status_t ret = BLK_STS_OK;
 	void *prot_buf = page_address(bip->bip_vec->bv_page) +
 		bip->bip_vec->bv_offset;
 
 	if (bio_data_dir(bio) == WRITE)
-		flag = true;
+		is_write = true;
 	iter.disk_name = bio->bi_disk->disk_name;
 	iter.interval = 1 << bi->interval_exp;
-	iter.seed = proc_iter->bi_sector;
+	iter.seed = proc_iter->bi_sector;	
 	iter.prot_buf = prot_buf;
+
+	memset(&user, 0, sizeof(user));
 
 	__bio_for_each_segment_hao(bv, bio, bviter, *proc_iter) {
 		void *kaddr = kmap_atomic(bv.bv_page);
@@ -219,40 +221,22 @@ static blk_status_t bio_integrity_process(struct bio *bio,
 		iter.data_buf = kaddr + bv.bv_offset;
 		iter.data_size = bv.bv_len;
 
-		if (flag) {
-			page_user = bv.bv_page;
-#ifdef CONFIG_METADATA_TRANS_20			
-//			user.f2fs_ino = page_user->mapping->host->i_ino;
-
-//			user.f2fs_off = page_user->index;
-			user.f2fs_ino = 0;
-			user.f2fs_off = 0;
-#endif
-
-//			user.f2fs_new_lba = bv.bv_new_address; 
-#ifdef CONFIG_METADATA_TRANS_12
-			user.f2fs_old_lba = bv.bv_old_address;
-#endif
-//			user.f2fs_temp = bio->temp;
-
-//			user.f2fs_type = bio->type;
-
+#ifdef CONFIG_METADATA_TRANS_24
+		if (is_write)
+		{
+			user.tx_id = bv.tx_id;
+			user.flag = bv.flag;
+			user.h_lpn = bv.h_lpn;
+			//if(user.flag ==  WAL_WRITE || user.flag == WAL_WRITE+1)
+			//	printk(KERN_ALERT "EXT4_IOC bio-integrity : flag = %d, db_pblk = %lu\n", bv.flag, bv.h_lpn);
 		}
-		else {
-#ifdef CONFIG_METADATA_TRANS_20
-			user.f2fs_ino = 0;
-			user.f2fs_off = 0;
-#endif
-//			user.f2fs_new_lba = 0; 
-#ifdef CONFIG_METADATA_TRANS_12
-			user.f2fs_old_lba = 0;
-#endif
-//			user.f2fs_temp = 0;
-//			user.f2fs_type = 0;
-
+		else 
+		{
+			user.tx_id = 0;
+			user.flag = 0;
+			user.h_lpn = 0;
 		}
-               // printk("hao:%d %d %d %d\n",user.f2fs_ino, user.f2fs_off, 
-               //                                   user.f2fs_old_lba, user.f2fs_new_lba);
+#endif
 		ret = proc_fn(&iter, user);
 		if (ret) {
 			kunmap_atomic(kaddr);
