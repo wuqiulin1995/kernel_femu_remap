@@ -410,16 +410,24 @@ submit_and_retry:
 	}
 	ret = bio_add_page(io->io_bio, page, bh->b_size, bh_offset(bh));
 	
-	//if(bh->flag == WAL_WRITE || bh->flag == WAL_WRITE+1)
-	//	printk(KERN_ALERT "EXT4_IOC page-io : flag = %d, db_pblk = %lu\n", bh->flag, bh->h_lpn);
+	if(bh->flag == WAL_WRITE || bh->flag == WAL_WRITE+1 || bh->flag == CP_WRITE)
+	{
+		//printk(KERN_ALERT "EXT4_IOC page-io : flag = %d, db_pblk = %lu\n", bh->flag, bh->h_lpn);
 	
-	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].tx_id = bh->tx_id;
-	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].flag = bh->flag;
-	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].h_lpn = bh->h_lpn;
+		io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].tx_id = bh->tx_id;
+		io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].flag = bh->flag;
+		io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].h_lpn = bh->h_lpn;
 
-	bh->tx_id = 0;
-	bh->flag = 0;
-	bh->h_lpn = 0;
+		bh->tx_id = 0;
+		bh->flag = 0;
+		bh->h_lpn = 0;
+	}
+	else
+	{
+		io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].tx_id = 0;
+        	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].flag = 0;
+        	io->io_bio->bi_io_vec[io->io_bio->bi_vcnt - 1].h_lpn = 0;
+	}
 
 	if (ret != bh->b_size)
 		goto submit_and_retry;

@@ -1101,7 +1101,7 @@ resizefs_out:
 		//fname = (char *) kmalloc(sizeof(char) * 4096, GFP_KERNEL);
 		//ss = dentry_path_raw(dentry, fname, 4096);
 		//kfree(fname);
-		//printk(KERN_ALERT "EXT4_IOC ioctl : pos = %ld, flag = %d, db_lblk = %u, db_pblk = %lu\n", wal_info.pos, wal_info.flag, wal_info.db_lblk, db_map.m_pblk);
+		//printk(KERN_ALERT "EXT4_IOC ioctl : wal file = %s, dst_lblk = %u, flag = %d, db_lblk = %u, db_pblk = %lu\n", ss, inode->dst_lblk, inode->flag, wal_info.db_lblk, inode->h_lpn);
 			
 		if (filp->f_mode & FMODE_PWRITE)  
 			ret = vfs_write(filp, (char __user *)wal_info.pbuf, wal_info.count, &(wal_info.pos));
@@ -1118,6 +1118,7 @@ resizefs_out:
 	}
 	case EXT4_IOC_CP_WRITE:
 	{
+		/*
 		struct cp_write_info cp_info;
 		const unsigned blkbits = inode->i_blkbits;
 		int ret = -ESPIPE;
@@ -1140,6 +1141,65 @@ resizefs_out:
 		
 		inode->flag = 0;
 		inode->dst_lblk = 0;
+		*/
+
+		struct wal_tx_write_info cp_info;
+		struct fd wal_f;
+		struct inode *wal_inode;
+		struct ext4_map_blocks wal_map;
+		const unsigned blkbits = inode->i_blkbits;
+		int ret = -ESPIPE;
+
+		memset(&cp_info, 0, sizeof(cp_info));
+		memset(&wal_map, 0, sizeof(wal_map));
+
+		if (copy_from_user(&cp_info, (struct wal_tx_write_info __user *)arg, sizeof(cp_info)))
+			return -EFAULT;
+
+		if (cp_info.pos < 0 || cp_info.db_lblk < 0 || cp_info.count < 0)
+			return -EINVAL;
+
+		wal_f = fdget(cp_info.db_fd);
+		if (wal_f.file)
+			wal_inode = file_inode(wal_f.file);
+		else 
+			return -EBADF;
+		
+		wal_map.m_lblk = cp_info.db_lblk;
+		wal_map.m_len = 1;
+
+		if(ext4_map_blocks(NULL,wal_inode, &wal_map, 0) < 0)
+		{
+			printk(KERN_ALERT "EXT4_IOC_CP_WRITE: ext4_map_blocks(NULL,wal_inode, &wal_map, 0) < 0\n");
+			return -EFAULT;
+		}
+		
+		if ((wal_map.m_flags & EXT4_MAP_MAPPED) == 0)
+		{
+			printk(KERN_ALERT "EXT4_IOC_CP_WRITE: (wal_map.m_flags & EXT4_MAP_MAPPED) == 0\n");
+			//return -EFAULT;
+			inode->h_lpn = 0;
+		}
+		else
+		{
+			inode->h_lpn = wal_map.m_pblk;
+		}
+
+		inode->flag = cp_info.flag;
+		inode->dst_lblk = cp_info.pos >> blkbits;
+		inode->tx_id = 0;
+
+		if (filp->f_mode & FMODE_PWRITE)  
+			ret = vfs_write(filp, (char __user *)cp_info.pbuf, cp_info.count, &(cp_info.pos));
+		if (ret == cp_info.count)
+			ret = 0;
+		
+		inode->flag = 0;
+		inode->dst_lblk = 0;
+		inode->h_lpn = 0;
+		inode->tx_id = 0;
+
+		fdput(wal_f);
 
 		return ret;
 	}
@@ -1241,18 +1301,17 @@ resizefs_out:
 				{
 					remap_len++;
 				}
-
-				if(rest_len == 1)
-                                {
-                                        ret = nvme_issue_remap(remap_wal_lpn, remap_db_lpn, remap_len, remap_ope);  // ��~K�~O~QREMAP�~Q�令
-                                        if(ret)
-                                        {
-                                                printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: nvme_issue_remap() error\n");
-                                                return ret;
-                                        }
-                                }
-
 			}
+
+			if(rest_len == 1)
+                        {
+                                ret = nvme_issue_remap(remap_wal_lpn, remap_db_lpn, remap_len, remap_ope);
+                                if(ret)
+                                {
+                                        printk(KERN_ALERT "EXT4_IOC_REMAP_CKPT: nvme_issue_remap() error\n");
+                                        return ret;
+                                }
+                        }
 
 			last_wal_lpn = wal_map.m_pblk;
 			last_db_lpn = db_map.m_pblk;
@@ -1277,7 +1336,7 @@ resizefs_out:
 		ext4_fsblk_t remap_src_lpn = 0, last_src_lpn = 0;
 		ext4_fsblk_t remap_dst_lpn = 0, last_dst_lpn = 0;
 		unsigned int remap_len = 0, rest_len = 0;
-		unsigned int remap_ope = REMAP_COPY;   // remap checkpoint write 也可以使用此分支，remap_ope = REMAP_CKPT
+		unsigned int remap_ope = REMAP_COPY;   // remap checkpoint write
 		int ret = 0, needed_blocks = 0, i_size_changed = 0;
 		handle_t *handle;
 		const unsigned blkbits = inode->i_blkbits;
@@ -1393,7 +1452,7 @@ resizefs_out:
 			{
 				if((src_map.m_pblk != last_src_lpn + 1) || (dst_map.m_pblk != last_dst_lpn + 1))
 				{
-					ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);  // 下发REMAP命令
+					ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);
 					if(ret)
 					{
 						printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: nvme_issue_remap() error\n");
@@ -1408,17 +1467,17 @@ resizefs_out:
 				{
 					remap_len++;
 				}
-
-				if(rest_len == 1)
-				{
-					ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);  // 下发REMAP命令
-					if(ret)
-					{
-						printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: nvme_issue_remap() error\n");
-						return ret;
-					}
-				}
 			}
+
+			if(rest_len == 1)
+                        {
+                                ret = nvme_issue_remap(remap_src_lpn, remap_dst_lpn, remap_len, remap_ope);
+                                if(ret)
+                                {
+                                        printk(KERN_ALERT "EXT4_IOC_REMAP_COPY: nvme_issue_remap() error\n");
+                                        return ret;
+                                }
+                        }
 
 			last_src_lpn = src_map.m_pblk;
 			last_dst_lpn = dst_map.m_pblk;

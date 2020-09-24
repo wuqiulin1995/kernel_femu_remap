@@ -143,7 +143,8 @@ static blk_status_t t100_pi_generate(struct blk_integrity_user user, struct blk_
 		pi->tx_id = cpu_to_be32(user.tx_id);
 		pi->flag = cpu_to_be32(user.flag);
 		pi->h_lpn = cpu_to_be64(user.h_lpn);
-		//printk("hao_debug t100_pi_generate: flag = %u, h_lpn = %lu\n",user.flag, user.h_lpn);
+		//if(user.flag == 104)
+		//	printk("t100_pi_generate: flag = %u, h_lpn = %lu\n",user.flag, user.h_lpn);
 
 		if (type == 1)
 			pi->ref_tag = cpu_to_be32(lower_32_bits(iter->seed));

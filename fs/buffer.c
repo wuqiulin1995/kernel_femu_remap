@@ -1976,6 +1976,9 @@ int __block_write_begin_int(struct page *page, loff_t pos, unsigned len,
 
 	block = (sector_t)page->index << (PAGE_SHIFT - bbits);
 
+	//printk(KERN_ALERT "EXT4_IOC buffer : flag = %d, db_pblk = %lu\n", inode->flag, inode->h_lpn);
+	
+
 	for(bh = head, block_start = 0; bh != head || !block_start;
 	    block++, block_start=block_end, bh = bh->b_this_page) {
 		block_end = block_start + blocksize;
@@ -1985,8 +1988,7 @@ int __block_write_begin_int(struct page *page, loff_t pos, unsigned len,
 		bh->h_lpn = 0;
 		if((inode->flag == WAL_WRITE || inode->flag == WAL_WRITE+1 || inode->flag == CP_WRITE) && inode->dst_lblk == block)	
 		{
-			//if(inode->flag == WAL_WRITE || inode->flag == WAL_WRITE+1)
-			//	printk(KERN_ALERT "EXT4_IOC buffer : flag = %d, db_pblk = %lu\n", inode->flag, inode->h_lpn);
+			//printk(KERN_ALERT "EXT4_IOC buffer : flag = %d, db_pblk = %lu\n", inode->flag, inode->h_lpn);
 			bh->tx_id = inode->tx_id;
 			bh->flag = inode->flag;
 			bh->h_lpn = inode->h_lpn;

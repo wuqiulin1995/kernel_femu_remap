@@ -2378,7 +2378,7 @@ int nvme_issue_remap(unsigned long src_lpn, unsigned long dst_lpn, unsigned int 
 {
 	struct nvme_command c;
 
-	printk(KERN_ALERT "NVMe remap: name = %s, src_lpn = %lu, dst_lpn = %lu, len = %u, ope = %u\n", g_dev->ctrl.name, src_lpn, dst_lpn, len, ope);
+	//printk(KERN_ALERT "NVMe remap: name = %s, src_lpn = %lu, dst_lpn = %lu, len = %u, ope = %u\n", g_dev->ctrl.name, src_lpn, dst_lpn, len, ope);
 
 	memset(&c, 0, sizeof(c));
 	c.remap.opcode = nvme_admin_remap;
